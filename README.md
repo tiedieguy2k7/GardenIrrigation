@@ -6,4 +6,6 @@ The initial algorithm was basically "Is it raining, or will it rain in 3 hours? 
 The algorithm has now improved a bit more to account for different rain scenarios and creates a 'water score'. Using this water score we adjust how much to water the garden (time wise)
 Future developments will take into account Sun vs. Clouds (evaporation is an issue), % chance of future precipitions, and temperature.
 
+Credentials should be stored in an Environment path or other secure location
+
 
