@@ -9,3 +9,20 @@ Future developments will take into account Sun vs. Clouds (evaporation is an iss
 Credentials should be stored in an Environment path or other secure location
 
 
+Hardware Used:
+Normally Closed Solenoid Valve (if no power, no water). This isn't the exact one I got, but I can't find my order
+https://ussolid.com/products/u-s-solid-electric-solenoid-valve-3-4-110v-ac-solenoid-valve-brass-body-normally-closed-viton-seal-html?country=US&gad_source=1&gad_campaignid=1332194851&gbraid=0AAAAAD2ek2oSPZVUG2NvoXedQyYbnls8b&gclid=Cj0KCQjwjo7DBhCrARIsACWauSke5NsqS3h39kGRtrhkZcaljH46h5TMU3MlXFE8FJv6dF93eDmbccIaAmsKEALw_wcB
+
+Bulkhead Fitting (to thread pipe to the bottom of the barrel):
+https://www.amazon.com/dp/B0CSN53G5J?ref=ppx_yo2ov_dt_b_fed_asin_title
+
+Smart Plug: (This is an older plug, and Kasa makes newer ones. Check the python library for supported models)
+https://www.amazon.com/dp/B0178IC734?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_5 
+
+Various fittings to connect from valve to Pex. 
+1/2" Pex TUbing 
+1/2" Pex Crimp Rings
+1/2" Pex Elbows and Tees 
+
+Irrigation Kit: 
+https://www.amazon.com/dp/B0BX4ZZCX4?ref_=ppx_hzsearch_conn_dt_b_fed_asin_title_1&th=1
