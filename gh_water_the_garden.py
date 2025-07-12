@@ -12,51 +12,74 @@ from kasa import Module
 import smtplib
 from email.message import EmailMessage
 
+import json 
+
+try: 
+    with open(r"..\venv\Lib\environment_parameters.json") as file:
+        print('Loading environment variables from file') 
+        environment_parameters = json.load(file)
+
+        # print(environment_parameters)
+        #Open Weather API Key
+        API_KEY = environment_parameters.get('API_KEY')
+        EMAIL_UPDATES = environment_parameters.get('email_updates')
+        #Location Info
+        CITY_NAME = environment_parameters.get('city_name')
+        STATE_CODE = environment_parameters.get('state_code')
+        ZIP = environment_parameters.get('ZIP')
+        COUNTRY_CODE = environment_parameters.get('country_code', 'USA') 
+        
+        #email send and receive credentials
+        email_address = environment_parameters.get('email_address')
+        email_password = environment_parameters.get('email_password')
+        email_update_to_address = environment_parameters.get('email_update_to_address')
+        email_update_from_address = environment_parameters.get('email_update_from_address')
+
+        #Smart Device Credentials
+        smart_dev_username = environment_parameters.get('smart_dev_username')
+        smart_dev_password = environment_parameters.get('smart_dev_password')
+        smart_dev_ip = environment_parameters.get('smart_dev_ip')
+
+        #Irrigation Parameters
+        IRRIGATE_ON_STARTUP = environment_parameters.get('irrigate_on_startup',False) 
+        IRRIGATE_ON_STARTUP_TIME = environment_parameters.get('irrigate_on_startup_time', 60) #in seconds
+        THRESHOLD_PERCENT_CHANCE_OF_PRECIP = environment_parameters.get('percent_chance_of_precip_threshold', 0.6)
+        print("Successfully loaded environment parameters")
+
+except Exception as e:
+    print(f"Error loading environment parameters: {e}")
+    print(f"If no configuration file exists, this program must close") 
+    exit(1) 
 
 dry_hours = 0
-#Credentials
-API_KEY = '' #Open Weather API KEY
-
-email_address = "" #Email login for sending
-email_password = "" #App Password for gmail
-
-EMAIL_UPDATES = True
-email_update_to_address = 'xyz@gmail.com'
-email_update_from_address = 'CustomAlerts123321@gmail.com'
-
-smart_dev_username = 'xyz@gmail.com'
-smart_dev_password = 'enter_password or use env variable'
-smart_dev_ip = '192.168.1.2'
-
-
-#Location Info
-ZIP = 13820
-city_name = 'Oneonta'
-state_code = 'NY'
-country_code = 'USA'
 
 def send_update_email(status, message ):
         if EMAIL_UPDATES:
-            status = status 
-            time = datetime.now()
+            try: 
+                status = status 
+                time = datetime.now()
 
-            message_to_send = f"""Time: {time} 
-                                Status set to :{status}
-                                Custom Message: 
-                                {message}
-                                """
+                message_to_send = f"""
+Time: {time} 
+Status set to: {status}
+Custom Message: 
+{message}
+                """
 
-            msg = EmailMessage()
-            msg["Subject"] = f"IrrigationUpdate-{status}" 
-            msg.set_content(message_to_send)
-            msg["From"] = f"{email_update_from_address}"
-            msg["To"] = f"{email_update_to_address}"
+                msg = EmailMessage()
+                msg["Subject"] = f"IrrigationUpdate-{status}" 
+                msg.set_content(message_to_send)
+                msg["From"] = f"{email_update_from_address}"
+                msg["To"] = f"{email_update_to_address}"
 
-            with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
-                smtp.ehlo()
-                smtp.starttls()
-                smtp.login(f"{email_address}", f"{email_password}")
-                smtp.send_message(msg) 
+                with smtplib.SMTP("smtp.gmail.com", 587) as smtp:
+                    smtp.ehlo()
+                    smtp.starttls()
+                    smtp.login(f"{email_address}", f"{email_password}")
+                    smtp.send_message(msg) 
+            except Exception as e:
+                print(f"Error sending email: {e}")
+                return 
 
 def get_lat_lon(city_name, state_code, country_code='USA'):
     try:
@@ -114,25 +137,23 @@ def get_watering_score(zip_lat, zip_lon):
             # check_time = datetime.fromtimestamp(datum['dt'])-timedelta(hours=9)   #wi
             delta =  datetime.fromtimestamp(item['dt']) -datetime.now()
             minutes_until_forecast = int(delta.total_seconds() )/60
-            hours_until_forecast = minutes_until_forecast / 60
-            
-            
+            hours_until_forecast = minutes_until_forecast / 60          
             
             print(f"Forecast in {hours_until_forecast} hours -  {item['weather'][0]['main']} ({item['weather'][0]['description']})") 
             print(f"Percent of Precipitation: {item.get('pop')*100}%")
             print('------------------------------') 
             
-            if item['weather'][0]['id'] in codes_thunderstorm:
-                thunderstorm_recs += 1
-                rain_events.append(hours_until_forecast)
-            elif item['weather'][0]['id'] in codes_drizzle:
-                drizzle_recs +=1
-                rain_events.append(hours_until_forecast)
-            elif item['weather'][0]['id'] in codes_rain:
-                rain_recs +=1
-                rain_events.append(hours_until_forecast)
-
-
+            #Only count records OVER 60% chance of rain
+            if item.get('pop', 0) > THRESHOLD_PERCENT_CHANCE_OF_PRECIP: 
+                if item['weather'][0]['id'] in codes_thunderstorm:
+                    thunderstorm_recs += 1
+                    rain_events.append(hours_until_forecast)
+                elif item['weather'][0]['id'] in codes_drizzle:
+                    drizzle_recs +=1
+                    rain_events.append(hours_until_forecast)
+                elif item['weather'][0]['id'] in codes_rain:
+                    rain_recs +=1
+                    rain_events.append(hours_until_forecast)
         print(f"Rain Events ={rain_events}")
             
         if len(rain_events) == 0: 
@@ -174,32 +195,41 @@ async def irrigate(on_off):
     try: 
         dev = await Discover.discover_single(smart_dev_ip, username=smart_dev_username, password=smart_dev_password) 
         
-        # print(dev.is_on)
+        # if for some reason the device is on and we are sending an on command, 
+        # we want to turn it off since it SHOULD NOT be on 
         if dev.is_off and on_off == 'on':
             print('Opening Valve, triggering pump')
             await dev.turn_on() 
             await dev.update() 
+            print("Pump should be on") 
+            return True 
         else:
             print('Shutting down pump, closing valve')
             await dev.turn_off()
             await dev.update()
-    
+            print("Pump should be off")
+            return True
+        
     except Exception as e:
         print(f"Irrigation process exception: {e}")
+        print(f"Error is : {e}")
         send_update_email("Irrigation Error:",f"{e}")
-        return
+        return False
 
 async def irrigate_status():
+    #This will return TRUE if it is on, False if it is off, and nothing in error
     try: 
         dev = await Discover.discover_single(smart_dev_ip, username=smart_dev_username, password=smart_dev_password) 
         
         if dev.is_on == True:
-            return True 
+            return 'On' 
         else: 
-            return False 
+            return 'Off' 
     except Exception as e:
         print(f"Irrigation Status Exception: {e}")
         send_update_email("Irrigation Status Error:",f"{e}")
+        return 'Error'
+
 
 async def main():
     
@@ -219,33 +249,48 @@ async def main():
 
     send_update_email("starting","Just starting Irrigation Protocol")
     
+    # Session variables to initialize
     pm_hours = [22, 23, 0, 1, 2, 3, 4, 5]
 
     watering_time = 0
     run_through = 0
     status_text = ''
     
-    last_irrigation_off = datetime.now()
+    last_irrigation_off = last_irrigation_on
     last_rain_event = datetime.fromtimestamp(1294790400)    
     irrigation_outcome = 'Just starting!'
+    irrigation_error = False 
+
+    #If we irrigate on startup, use the parameters for irrigation timing
+    # Make sure to catch if the irrigation does not turn off
+    # TODO: However, the 'while' loop here could probably be eliminated since we check if its on 
+    # when not supposed to be below as part of startup
+    if IRRIGATE_ON_STARTUP:
+        await irrigate('on') 
+        sleep(IRRIGATE_ON_STARTUP_TIME) # for irrigation on startup, only water for 60 seconds 
+        irrigation_outcome = await irrigate('off') 
+        while not irrigation_outcome:
+            print("Irrigation did not turn off. Retrying")
+            irrigation_outcome = await irrigate('off')
+            time.sleep(10)
+
+    
     print("Starting garden irrigation watcher...")
-    lat, lon = get_lat_lon('Oneonta','NY') 
+    lat, lon = get_lat_lon(CITY_NAME,STATE_CODE, COUNTRY_CODE) 
     
     with open("watering_log.txt", "a") as f:
         f.writelines(f"{datetime.now()} - Program Initiated | watching for coordinates- {lat},{lon}\n")
 
-    status = await irrigate_status()
-    if status:
-        status_text = 'On'
-    else: 
-        status_text = 'Off'
+    #I feel like this step should not be necessary, but prior attempt to just use T/F return status did not work 
+    status_text = await irrigate_status()
 
-    if status:
+    if status_text == 'On':
         print("ERROR: IRRIGATION SHOULD BE OFF BUT REPORTS ON!")
         send_update_email("ERROR","IRRIGATION SHOULD BE OFF BUT REPORTS ON!")
 
         with open("watering_log.txt", "a") as f:
             f.writelines(f"{datetime.now()} - ERROR: IRRIGATION SHOULD BE OFF BUT REPORTS ON!\n")
+        #the system reports ON but should be OFF; turn it off now!
         on_off = 'off'
         await irrigate(on_off)
         last_irrigation_off = datetime.now() 
@@ -291,7 +336,7 @@ async def main():
             if water_score>=1 and mins_since_irrigation_on >=90 and mins_since_rain_event >=60:
                 print(f"Water Score is {water_score} | Fire the sprinklers")
                                
-                watering_time = 150 #2.5 minutes by default
+                watering_time = 90 #1.5 minutes by default
                 watering_time += 30*water_score # Add based on water score
                 if datetime.now().hour in pm_hours:
                     print("Its night time; watering half as much")
@@ -301,39 +346,41 @@ async def main():
                     f.writelines(f"{datetime.now()} - Irrigation turning on for {watering_time} seconds\n")
                     print(f"{datetime.now()} - Irrigation turning on for {watering_time} seconds aka {watering_time/60} mins\n")
                 
-                on_off = 'on'
-                await irrigate(on_off) 
-                last_irrigation_on = datetime.now()               
-                send_update_email("Activating",f"Activating Irrigation for {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}")
-                time.sleep(watering_time) # This is the watering time
+                outcome = await irrigate('on') 
+                if not outcome:  #Program did not hit an error
+                    last_irrigation_on = datetime.now()               
+                    send_update_email("Activating",f"Activating Irrigation for {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}")
+                    time.sleep(watering_time) # This is the watering time
+                    outcome = await irrigate('off')
+                    
+                    looper = 0
+                    while not outcome:
+                        looper += 1
+                        print(f"Irrigation did not turn off. Retrying. Attempt: {looper}")
+                        outcome = await irrigate('off')
+                        time.sleep(10) # wait 10 seconds before trying again
+                        print("If this doesn't shut off, its a problem") 
+                    print("Irrigation turned off successfully")
+                    last_irrigation_off = datetime.now() 
+                    send_update_email("Deactivating",f"Deactivating Irrigation. Run time should have been {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}")
                 
-                on_off = 'off'
-                await irrigate(on_off)
-                last_irrigation_off = datetime.now() 
-                send_update_email("Deactivating",f"Deactivating Irrigation. Run time should have been {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}")
-                with open("watering_log.txt", "a") as f:
-                    f.writelines(f"{datetime.now()} - Irrigation turned off\n")
-                    print("Plug Off:")
+                    with open("watering_log.txt", "a") as f:
+                        f.writelines(f"{datetime.now()} - Irrigation turned off\n")
+                        print("Plug Off:")
 
-                irrigation_outcome = 'Received a call for water. Went through with irrigation.'
+                    irrigation_outcome = 'Received a call for water. Went through with irrigation.'
+                else:
+                    print("Irrigation did not turn on properly. It hit an exception") 
+                    irrigation_error = True 
 
             elif mins_since_irrigation_on <90: 
                 print(f"We watered {mins_since_irrigation_on} minutes ago. Ignoring any call for water")
                 irrigation_outcome = 'We irrigated recently, so no need to do it now'
                 
-        status = await irrigate_status()
-        if status:
-            status_text = 'On'
-        else: 
-            status_text = 'Off'
-
-        
+        status_text = await irrigate_status()       
         send_update_email("Waiting",f"Irrigation Status = {status_text}. Run time would have been {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}. Irrigation Notes: {irrigation_outcome}")
         
-        await irrigate('off') #Extra test to make sure the irrigation turns off before sleeping
-        
-        
-        wait_time = 3600 / 2 
+        await irrigate('off') #Extra try to make sure the irrigation turns off before sleeping
         
         try: 
             with open("LastIrrigation.txt", "w") as li:
@@ -341,6 +388,15 @@ async def main():
         except:
             print("file write error. Local Variable only ")
             last_irrigation_off = datetime.now() 
+        
+        #If it was unable to water, run the program after 60 seconds by only waiting 60 seconds
+        if irrigation_error:
+            wait_time = 60
+            irrigation_error = False #set to false so that we don't get stuck in this statement
+        #Else wait a different amount of time (30-60 minutes))
+        else: 
+            wait_time = 3600 / 2 
+        
         
         with open("watering_log.txt", "a") as f:
                     f.writelines(f"{datetime.now()} - Irrigation Routine Over | Waiting {wait_time}\n")
