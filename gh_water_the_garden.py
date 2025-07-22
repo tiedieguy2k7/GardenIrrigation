@@ -193,6 +193,7 @@ def get_watering_score(zip_lat, zip_lon):
 
 async def irrigate(on_off):
     try: 
+        
         dev = await Discover.discover_single(smart_dev_ip, username=smart_dev_username, password=smart_dev_password) 
         
         # if for some reason the device is on and we are sending an on command, 
@@ -200,12 +201,14 @@ async def irrigate(on_off):
         if dev.is_off and on_off == 'on':
             print('Opening Valve, triggering pump')
             await dev.turn_on() 
+            time.sleep(1)
             await dev.update() 
             print("Pump should be on") 
             return True 
         else:
             print('Shutting down pump, closing valve')
             await dev.turn_off()
+            time.sleep(1) 
             await dev.update()
             print("Pump should be off")
             return True
@@ -347,7 +350,9 @@ async def main():
                     print(f"{datetime.now()} - Irrigation turning on for {watering_time} seconds aka {watering_time/60} mins\n")
                 
                 outcome = await irrigate('on') 
-                if not outcome:  #Program did not hit an error
+                print(f"Outcome of irrigation on: {outcome}")
+
+                if outcome:  #Program did not hit an error
                     last_irrigation_on = datetime.now()               
                     send_update_email("Activating",f"Activating Irrigation for {watering_time/60} mins. Run Through = {run_through}, Water Score = {water_score}")
                     time.sleep(watering_time) # This is the watering time
